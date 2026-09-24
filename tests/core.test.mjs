@@ -1,0 +1,12 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { category, exportDota, importDota, newDocument, parseDota, parseProject, projectJSON, validateDota } from '../src/core.mjs';
+import { convertPixels } from '../src/converter.mjs';
+const sample = readFileSync(new URL('../fixtures/sample_hero_grid_config.json', import.meta.url), 'utf8');
+test('real-shaped fixture parses and round trips unchanged', () => { const root=parseDota(sample);assert.deepEqual(JSON.parse(JSON.stringify(root)),root);assert.equal(validateDota(root).length,0); });
+test('unknown fields in old configs survive append', () => { const doc=importDota(sample);doc.imported.configs.push({config_name:'Original',categories:[],new_field:{value:true}});const out=exportDota(doc);assert.equal(out.configs[0].new_field.value,true);assert.equal(out.configs.at(-1).categories[0].hero_ids[0],1); });
+test('duplicate names are renamed without replacement', () => { const doc=newDocument();doc.name='Example';doc.categories.push(category('Carry',10,20,200,100,[1]));const out=exportDota(doc,parseDota(sample));assert.equal(out.configs.length,2);assert.equal(out.configs[1].config_name,'Example (2)'); });
+test('malformed geometry and IDs are rejected', () => { const bad=JSON.parse(sample);bad.configs[0].categories[0].width='large';assert.match(validateDota(bad).join(' '),/width/);bad.configs[0].categories[0].width=10;bad.configs[0].categories[0].hero_ids=[0];assert.match(validateDota(bad).join(' '),/hero_ids/); });
+test('project retains symbol art separately from Dota JSON', () => { const doc=newDocument();doc.art=[{x:5,y:6,symbol:'█',size:12}];doc.categories=[category('One')];const project=parseProject(projectJSON(doc));assert.equal(project.art.length,1);assert.ok(!JSON.stringify(exportDota(doc)).includes('symbol')); });
+test('converter produces symbols in all modes and honors transparent pixels', () => { const px=new Uint8ClampedArray(16*16*4);for(let i=0;i<px.length;i+=4){px[i]=px[i+1]=px[i+2]=(i/4)%16<8?0:255;px[i+3]=255;}for(const mode of ['ascii','line','silhouette'])assert.ok(convertPixels(px,16,16,{mode,columns:12,rows:12,threshold:10}).length>0);px.fill(0);assert.equal(convertPixels(px,16,16,{mode:'ascii',columns:12,rows:12}).length,0); });

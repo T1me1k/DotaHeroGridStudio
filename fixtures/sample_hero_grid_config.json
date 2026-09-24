@@ -1,0 +1,11 @@
+{
+  "version": 3,
+  "configs": [
+    {
+      "config_name": "Example",
+      "categories": [
+        { "category_name": "Favorites", "x_position": 0, "y_position": 0, "width": 530.434814, "height": 293.4782715, "hero_ids": [1, 2, 3] }
+      ]
+    }
+  ]
+}
