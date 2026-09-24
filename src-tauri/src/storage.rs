@@ -84,8 +84,9 @@ fn write_with_backup(target:&Path,expected:&Option<Vec<u8>>,output:&[u8],keep:us
 }
 pub fn install(target:&Path,grid:Value,keep:usize)->Result<InstallResult,String>{install_mode(target,grid,keep,false)}
 pub fn install_mode(target:&Path,mut grid:Value,keep:usize,test:bool)->Result<InstallResult,String>{
+    validate_grid(&grid)?;
     if test { grid["config_name"]=json!("DHGS TEST"); }
-    validate_grid(&grid)?;let _lock=lock(target)?;let original=snapshot(target)?;
+    let _lock=lock(target)?;let original=snapshot(target)?;
     let mut root:Value=match &original{Some(b)=>serde_json::from_slice(b).map_err(|e|format!("Existing JSON invalid: {e}"))?,None=>json!({"version":3,"configs":[]})};
     validate_file(&root)?;
     let configs=root["configs"].as_array_mut().ok_or("configs missing")?;
@@ -126,5 +127,5 @@ mod tests {
  #[test]fn lock_prevents_concurrent_write(){let d=temp();let p=d.0.join("hero_grid_config.json");let _l=lock(&p).unwrap();assert!(install(&p,grid(),20).is_err());}
  #[test]fn test_install_replaces_only_named_test_grid(){let d=temp();let p=d.0.join("hero_grid_config.json");install(&p,grid(),20).unwrap();for _ in 0..3{install_mode(&p,grid(),20,true).unwrap();}let v:Value=serde_json::from_slice(&fs::read(&p).unwrap()).unwrap();assert_eq!(v["configs"].as_array().unwrap().len(),2);assert_eq!(v["configs"][0]["config_name"],"Art");assert_eq!(v["configs"][1]["config_name"],"DHGS TEST");}
  #[test]fn recovery_backs_up_raw_and_rejects_stale_preview(){let d=temp();let p=d.0.join("hero_grid_config.json");fs::write(&p,b"damaged").unwrap();let recovered=json!({"version":3,"configs":[grid()]});assert!(recover(&p,"stale",recovered.clone(),20).is_err());let backup=recover(&p,"damaged",recovered,20).unwrap();assert_eq!(fs::read(backup_dir(&p).unwrap().join(backup)).unwrap(),b"damaged");}
- #[test]fn budget_and_bad_geometry_rejected(){let mut g=grid();g["categories"][0]["width"]=json!(-1);assert!(validate_grid(&g).is_err());}
+ #[test]fn budget_and_bad_geometry_rejected(){let d=temp();assert!(install_mode(&d.0.join("hero_grid_config.json"),Value::Null,20,true).is_err());let mut g=grid();g["categories"][0]["width"]=json!(-1);assert!(validate_grid(&g).is_err());}
 }

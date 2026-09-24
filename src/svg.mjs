@@ -13,6 +13,7 @@ export function sanitizeSvg(text) {
   const view=(root.getAttribute('viewBox')||'0 0 800 600').trim().split(/[\s,]+/).map(Number);
   const width=parseFloat(root.getAttribute('width'))||view[2],height=parseFloat(root.getAttribute('height'))||view[3];
   if(!Number.isFinite(width)||!Number.isFinite(height)||width<=0||height<=0)throw Error('Неверный размер SVG');
-  const scale=Math.min(1,1400/Math.max(width,height));root.setAttribute('width',String(Math.round(width*scale)));root.setAttribute('height',String(Math.round(height*scale)));
+  if(!root.hasAttribute('viewBox'))root.setAttribute('viewBox',`0 0 ${width} ${height}`);
+  const scale=Math.min(1,1400/Math.max(width,height));root.setAttribute('width',String(Math.max(1,Math.round(width*scale))));root.setAttribute('height',String(Math.max(1,Math.round(height*scale))));
   return new XMLSerializer().serializeToString(xml);
 }
