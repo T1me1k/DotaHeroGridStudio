@@ -1,0 +1,6 @@
+let database;
+async function db(){if(!database)database=new Promise((resolve,reject)=>{const request=indexedDB.open('dhgs-project-history',1);request.onupgradeneeded=()=>request.result.createObjectStore('snapshots',{keyPath:'id'});request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});return database;}
+async function request(mode,action){const database=await db();return new Promise((resolve,reject)=>{const tx=database.transaction('snapshots',mode),store=tx.objectStore('snapshots');let result;const req=action(store);req.onsuccess=()=>result=req.result;tx.oncomplete=()=>resolve(result);tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);});}
+export const loadSnapshots=()=>request('readonly',s=>s.getAll());
+export const loadAutosave=()=>request('readonly',s=>s.get('autosave'));
+export async function saveVersion(json,name='Snapshot',autosave=false){const item={id:autosave?'autosave':crypto.randomUUID(),name,time:Date.now(),json};await request('readwrite',s=>s.put(item));if(!autosave){const all=(await loadSnapshots()).filter(x=>x.id!=='autosave').sort((a,b)=>b.time-a.time);for(const old of all.slice(10))await request('readwrite',s=>s.delete(old.id));}return item;}

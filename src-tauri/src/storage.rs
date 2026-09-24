@@ -82,14 +82,18 @@ fn write_with_backup(target:&Path,expected:&Option<Vec<u8>>,output:&[u8],keep:us
     if let Ok(backups)=list(target){for b in backups.into_iter().skip(keep){let _=fs::remove_file(dir.join(b.name));}}
     Ok(name)
 }
-pub fn install(target:&Path,mut grid:Value,keep:usize)->Result<InstallResult,String>{
+pub fn install(target:&Path,grid:Value,keep:usize)->Result<InstallResult,String>{install_mode(target,grid,keep,false)}
+pub fn install_mode(target:&Path,mut grid:Value,keep:usize,test:bool)->Result<InstallResult,String>{
+    if test { grid["config_name"]=json!("DHGS TEST"); }
     validate_grid(&grid)?;let _lock=lock(target)?;let original=snapshot(target)?;
     let mut root:Value=match &original{Some(b)=>serde_json::from_slice(b).map_err(|e|format!("Existing JSON invalid: {e}"))?,None=>json!({"version":3,"configs":[]})};
     validate_file(&root)?;
     let configs=root["configs"].as_array_mut().ok_or("configs missing")?;
     let name=grid["config_name"].as_str().ok_or("name missing")?.to_string();let mut candidate=name.clone();let mut n=2;
-    while configs.iter().any(|c|c["config_name"].as_str()==Some(candidate.as_str())){candidate=format!("{name} ({n})");n+=1;}
-    grid["config_name"]=json!(candidate);let categories=grid["categories"].as_array().unwrap().len();configs.push(grid);
+    while !test && configs.iter().any(|c|c["config_name"].as_str()==Some(candidate.as_str())){candidate=format!("{name} ({n})");n+=1;}
+    grid["config_name"]=json!(candidate);let categories=grid["categories"].as_array().unwrap().len();
+    if test { let position=configs.iter().position(|c|c["config_name"].as_str()==Some("DHGS TEST")).unwrap_or(configs.len());configs.retain(|c|c["config_name"].as_str()!=Some("DHGS TEST"));configs.insert(position.min(configs.len()),grid); }
+    else { configs.push(grid); }
     let out=serde_json::to_vec_pretty(&root).map_err(|e|e.to_string())?;
     let backup=write_with_backup(target,&original,&out,keep)?;Ok(InstallResult{name:candidate,backup,categories})
 }
@@ -98,6 +102,14 @@ pub fn restore(target:&Path,name:&str,keep:usize)->Result<String,String>{
     let _lock=lock(target)?;let backup=read_regular(&backup_dir(target)?.join(name))?;
     let root:Value=serde_json::from_slice(&backup).map_err(|e|e.to_string())?;validate_file(&root)?;
     let original=snapshot(target)?;write_with_backup(target,&original,&backup,keep)
+}
+pub fn read_text(target:&Path)->Result<String,String>{match snapshot(target)?{Some(bytes)=>String::from_utf8(bytes).map_err(|e|e.to_string()),None=>Ok("{\"version\":3,\"configs\":[]}".into())}}
+pub fn writable(target:&Path)->Result<(),String>{let temp=target.with_extension(format!("{}.probe",stamp()));let result=durable_new(&temp,b"probe");let _=fs::remove_file(temp);result}
+pub fn recover(target:&Path,expected:&str,recovered:Value,keep:usize)->Result<String,String>{
+    validate_file(&recovered)?;let _lock=lock(target)?;let original=snapshot(target)?;
+    if original.as_deref()!=Some(expected.as_bytes()){return Err("Файл изменился после предварительного восстановления; перечитайте его".into());}
+    if let Ok(v)=serde_json::from_str::<Value>(expected){if validate_file(&v).is_ok(){return Err("Исходный файл исправен; используйте обычное открытие".into());}}
+    let out=serde_json::to_vec_pretty(&recovered).map_err(|e|e.to_string())?;write_with_backup(target,&original,&out,keep)
 }
 #[cfg(test)]
 mod tests {
@@ -112,5 +124,7 @@ mod tests {
  #[test]fn unknown_fields_and_retention_survive(){let d=temp();let p=d.0.join("hero_grid_config.json");fs::write(&p,b"{\"version\":3,\"extra\":42,\"configs\":[]}").unwrap();for _ in 0..4{install(&p,grid(),2).unwrap();}let v:Value=serde_json::from_slice(&fs::read(&p).unwrap()).unwrap();assert_eq!(v["extra"],42);assert_eq!(list(&p).unwrap().len(),2);}
  #[test]fn rejects_traversal_and_invalid_backup(){let d=temp();let p=d.0.join("hero_grid_config.json");assert!(restore(&p,"../outside.json",20).is_err());install(&p,grid(),20).unwrap();fs::write(backup_dir(&p).unwrap().join("grid-bad.json"),b"{}").unwrap();assert!(restore(&p,"grid-bad.json",20).is_err());}
  #[test]fn lock_prevents_concurrent_write(){let d=temp();let p=d.0.join("hero_grid_config.json");let _l=lock(&p).unwrap();assert!(install(&p,grid(),20).is_err());}
+ #[test]fn test_install_replaces_only_named_test_grid(){let d=temp();let p=d.0.join("hero_grid_config.json");install(&p,grid(),20).unwrap();for _ in 0..3{install_mode(&p,grid(),20,true).unwrap();}let v:Value=serde_json::from_slice(&fs::read(&p).unwrap()).unwrap();assert_eq!(v["configs"].as_array().unwrap().len(),2);assert_eq!(v["configs"][0]["config_name"],"Art");assert_eq!(v["configs"][1]["config_name"],"DHGS TEST");}
+ #[test]fn recovery_backs_up_raw_and_rejects_stale_preview(){let d=temp();let p=d.0.join("hero_grid_config.json");fs::write(&p,b"damaged").unwrap();let recovered=json!({"version":3,"configs":[grid()]});assert!(recover(&p,"stale",recovered.clone(),20).is_err());let backup=recover(&p,"damaged",recovered,20).unwrap();assert_eq!(fs::read(backup_dir(&p).unwrap().join(backup)).unwrap(),b"damaged");}
  #[test]fn budget_and_bad_geometry_rejected(){let mut g=grid();g["categories"][0]["width"]=json!(-1);assert!(validate_grid(&g).is_err());}
 }

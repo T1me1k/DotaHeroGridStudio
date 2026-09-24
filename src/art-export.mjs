@@ -1,7 +1,7 @@
 // Only the six real Dota category fields cross the export boundary.
 export const DEFAULT_EXPORT = Object.freeze({ enabled: true, mode: 'auto', xOffset: 0, yOffset: 0,
   horizontalSpacing: 1, verticalSpacing: 1, baselineOffset: 0, preserveAspect: true,
-  runAdvance: 8, tolerance: 0.2, maxRunLength: 64, budget: 1200, asciiFallback: true });
+  runAdvance: 8, tolerance: 0.2, maxRunLength: 64, budget: 1200, asciiFallback: true, precision: 3, dedupe: true });
 export const SYMBOL_SETS = { ASCII: ' .:-=+*#%@', LINES: '─│/\\', BOX: '─│╱╲┌┐└┘', BLOCKS: ' ░▒▓█', DOTS: ' .·•:', CUSTOM: ' .:-=+*#%@' };
 export const FALLBACKS = { '╱': '/', '╲': '\\', '─': '-', '│': '|', '█': '#', '▓': '#', '▒': '+', '░': '.', '•': '*', '·': '.', '┌': '+', '┐': '+', '└': '+', '┘': '+', '├': '+', '┤': '+', '┬': '+', '┴': '+', '┼': '+' };
 export function textCategory(text, x, y) { return { category_name: text, x_position: x, y_position: y, width: 0, height: 0, hero_ids: [] }; }
@@ -23,6 +23,7 @@ export function normalizeExport(input = {}) {
   if (o.horizontalSpacing <= 0 || o.verticalSpacing <= 0 || o.runAdvance <= 0 || o.tolerance < 0 || o.tolerance > 1) throw Error('Spacing must be positive and tolerance between 0 and 1');
   if (!Number.isInteger(o.budget) || o.budget < 1 || o.budget > 10000) throw Error('Category budget must be between 1 and 10,000');
   if (!Number.isInteger(o.maxRunLength) || o.maxRunLength < 1 || o.maxRunLength > 128) throw Error('Text run length must be between 1 and 128');
+  if (!Number.isInteger(o.precision) || o.precision < 0 || o.precision > 6) throw Error('Precision must be 0..6');
   if (o.preserveAspect) o.verticalSpacing = o.horizontalSpacing;
   return o;
 }
@@ -38,16 +39,20 @@ export function compatibleText(text, options, report) {
 }
 export function buildArtExport(art, input = {}) {
   validateArt(art);
-  const options = normalizeExport(input), report = { symbols: art.length, fallbackCount: 0, categories: [], reduction: 0, warnings: [] };
+  const options = normalizeExport(input), report = { symbols: art.length, fallbackCount: 0, duplicateCount: 0, categories: [], reduction: 0, warnings: [] };
   if (!options.enabled) return report;
-  const items = art.filter(a => a.symbol.trim()).map(a => ({ x: a.x * options.horizontalSpacing + options.xOffset,
+  let items = art.filter(a => a.symbol.trim()).map(a => ({ x: a.x * options.horizontalSpacing + options.xOffset,
     y: a.y * options.verticalSpacing + options.yOffset + options.baselineOffset,
-    size: a.size ?? 16, text: compatibleText(a.symbol, options, report) }));
+    size: a.size ?? 16, layer: a.layer ?? "", text: compatibleText(a.symbol, options, report) }));
+  const inputCount=items.length;
+  const factor=10**options.precision;
+  items=items.map(a=>({...a,x:Math.round(a.x*factor)/factor,y:Math.round(a.y*factor)/factor}));
+  if(options.dedupe){const map=new Map();for(const a of items){const key=JSON.stringify([a.x,a.y,a.text]);if(map.has(key))report.duplicateCount++;else map.set(key,a);}items=[...map.values()];}
   // Group only continuous cells. Never bridge gaps or insert uncalibrated whitespace.
   // Anchored row quantisation avoids merging a staircase into one line.
   const rows = new Map();
   for (const a of items) {
-    const key = options.mode === 'glyph' ? rows.size : `${a.size}:${Math.round(a.y * 1000)}`;
+    const key = options.mode === 'glyph' ? rows.size : `${a.layer}:${a.size}:${Math.round(a.y * 1000)}`;
     if (!rows.has(key)) rows.set(key, []);
     rows.get(key).push(a);
   }
@@ -63,7 +68,7 @@ export function buildArtExport(art, input = {}) {
       expected = a.x + advance;
     }
   }
-  report.reduction = items.length ? 100 * (1 - report.categories.length / items.length) : 0;
+  report.reduction = inputCount ? 100 * (1 - report.categories.length / inputCount) : 0;
   if (report.fallbackCount) report.warnings.push(`${report.fallbackCount} glyphs replaced by compatible fallback`);
   if (!options.supportedGlyphs) report.warnings.push('Radiance not loaded: glyph coverage and text metrics are unverified');
   if (report.categories.length > options.budget) report.warnings.push(`Category budget exceeded: ${report.categories.length} > ${options.budget}`);

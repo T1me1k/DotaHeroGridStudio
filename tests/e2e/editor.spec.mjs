@@ -18,8 +18,15 @@ test('Line Art export, budget gate, calibration, and JSON dialog',async({page})=
 });
 test('install invokes the same generated text config',async({page})=>{
  await page.addInitScript(()=>{window.__TAURI__={core:{invoke:async(cmd,args)=>{if(cmd==='find_accounts')return[{account:'123',path:'C:/Steam/userdata/123/570/remote/cfg/hero_grid_config.json',exists:false}];if(cmd==='install_grid'){window.installed=args;return{name:args.grid.config_name,backup:'test.json',categories:args.grid.categories.length};}return[];}}};});
- await page.goto('/');await page.locator('#calibrate').click();await page.locator('#refreshAccounts').click();await page.locator('#account').selectOption({index:1});await page.locator('#install').click();await expect(page.locator('#message')).toContainText('Установлена');const data=await page.evaluate(()=>window.installed);expect(data.grid.categories.some(c=>c.category_name==='█')).toBeTruthy();expect(data.grid.categories.every(c=>c.hero_ids.length===0)).toBeTruthy();
+ await page.goto('/');await page.locator('#imageInput').setInputFiles('fixtures/converter_probe.png');await expect(page.locator('#imageInfo')).toContainText('160');await page.locator('#convert').click();await expect(page.locator('#message')).toContainText('Создано');await page.locator('#refreshAccounts').click();await page.locator('#account').selectOption({index:1});await page.locator('#install').click();await expect(page.locator('#message')).toContainText('Установлена');const data=await page.evaluate(()=>window.installed);expect(data.grid.categories.length).toBeGreaterThan(0);expect(data.grid.categories.every(c=>c.hero_ids.length===0)).toBeTruthy();
 });
 test('category edits undo and redo and invalid files do not replace project',async({page})=>{
  await page.goto('/');await page.locator('#addCategory').click();await page.locator('[data-key="category_name"]').fill('Changed');await page.locator('[data-key="category_name"]').blur();await page.locator('#undo').click();await expect(page.locator('.cat')).toContainText('New category');await page.locator('#redo').click();await expect(page.locator('.cat')).toContainText('Changed');await page.locator('#fileInput').setInputFiles({name:'bad.json',mimeType:'application/json',buffer:Buffer.from('{')});await expect(page.locator('.cat')).toContainText('Changed');
+});
+
+test('Radiance-style font load and embedded project restore',async({page})=>{
+ test.skip(!process.env.DOTA_TEST_FONT,'Set DOTA_TEST_FONT to a local TTF/OTF for coverage and FontFace integration');
+ await page.goto('/');await page.locator('#fontInput').setInputFiles(process.env.DOTA_TEST_FONT);await expect(page.locator('#fontStatus')).toContainText('glyph coverage');
+ const pending=page.waitForEvent('download');await page.locator('#save').click();const download=await pending;const data=await readFile(await download.path());
+ await page.locator('#fileInput').setInputFiles({name:'font.dotagrid',mimeType:'application/json',buffer:data});await expect(page.locator('#message')).toContainText('Открыт');await expect(page.locator('#fontStatus')).toContainText('glyph coverage');
 });
