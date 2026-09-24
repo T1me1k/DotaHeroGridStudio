@@ -1,0 +1,50 @@
+{
+  "version": 3,
+  "configs": [
+    {
+      "config_name": "Text category probe",
+      "categories": [
+        {
+          "category_name": "A",
+          "x_position": 40,
+          "y_position": 30,
+          "width": 0,
+          "height": 0,
+          "hero_ids": []
+        },
+        {
+          "category_name": "0123456789",
+          "x_position": 40,
+          "y_position": 70,
+          "width": 0,
+          "height": 0,
+          "hero_ids": []
+        },
+        {
+          "category_name": "─│╱╲",
+          "x_position": 40,
+          "y_position": 110,
+          "width": 0,
+          "height": 0,
+          "hero_ids": []
+        },
+        {
+          "category_name": "█",
+          "x_position": 200,
+          "y_position": 150,
+          "width": 0,
+          "height": 0,
+          "hero_ids": []
+        },
+        {
+          "category_name": "# + / \\",
+          "x_position": 400,
+          "y_position": 190,
+          "width": 0,
+          "height": 0,
+          "hero_ids": []
+        }
+      ]
+    }
+  ]
+}

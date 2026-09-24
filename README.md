@@ -1,29 +1,72 @@
-# Dota Hero Grid Studio
+# Dota Hero Grid Studio v0.2
 
-Early functional release (v0.1). A local editor for Dota 2 hero grid **categories and hero IDs**, with image conversion to an editor-only symbol sketch. The converter's symbol sketch is **not exported to Dota**: published `hero_grid_config.json` examples show categories with positions, dimensions and `hero_ids`, but do not establish support for arbitrary glyph objects. Do not expect imported images to appear in Dota until a real game-tested technique is verified.
+Локальный редактор Hero Grid. PNG/JPG/WebP → ASCII / Line Art / Silhouette / Dither → текстовые категории Dota → `hero_grid_config.json`.
 
-## Run
+**Экспериментальный экспорт:** каждый glyph/строка записывается в `category_name`, с координатами и `width: 0`, `height: 0`, `hero_ids: []`. Этот приём используется для отдельных надписей в [dota-hero-grid-generator](https://github.com/hauzer/dota-hero-grid-generator/blob/master/dota_hero_grid_generator.py). Unicode, baseline, ширину строк и пределы производительности нужно проверить в текущей Dota. Никакие выдуманные `fontSize`, `rotation` или `symbol` в JSON не добавляются.
 
-Requires Node.js 20+. The web editor has no runtime dependencies:
+## Быстрый запуск
+
+Node.js 20+:
 
 ```sh
+npm ci
 npm run dev
 ```
 
-Open `http://127.0.0.1:4173`. Run `npm test`, `npm run typecheck`, `npm run build` to check the project.
+Открыть http://127.0.0.1:4173. Сам веб-редактор работает без сторонних runtime-библиотек. `npm ci` устанавливает CLI для сборки и инструменты тестов.
 
-For Windows desktop install: install Node.js, Rust, Visual Studio C++ Build Tools and WebView2; run `npm install`, then `npm run tauri -- dev` or `npm run tauri -- build`. Windows binaries were not produced or tested in the Linux authoring environment.
+Для Windows: Rust stable, Visual Studio C++ Build Tools и WebView2, затем:
 
-## Use
+```sh
+npm run tauri -- dev
+npm run tauri -- build --bundles nsis
+```
 
-Drag a PNG/JPEG/WebP onto the app and choose Line Art, ASCII or Silhouette. The converted picture is visible on the canvas and saved in a `.dotagrid` project. Choose **Save project** to keep image and symbols. Pan, zoom at cursor, select and move category rectangles, edit category sizes and positive integer hero IDs. Undo/redo works for category edits and conversion.
+GitHub Actions **Windows build** собирает NSIS `.exe` и сохраняет `DotaHeroGridStudio-Windows-x64` в Artifacts конкретного запуска. Автоматической публикации Release нет. Состояние последнего запуска: https://github.com/T1me1k/DotaHeroGridStudio/actions/workflows/windows-build.yml
 
-**Open** accepts `.dotagrid` and `hero_grid_config.json`. **Export JSON** adds the edited config to imported configs (renaming duplicate names), preserving unknown fields in older configs. The downloaded file is only a Dota-shaped export of categories and heroes. No automatic claim is made that every generated grid will look identical in the game.
+## Первый тест в Dota
 
-In the Windows Tauri app, click **Refresh accounts**, select a discovered Steam account, and **Install to Dota**. Installation refuses a symbol sketch to avoid losing the visible composition. It refuses to modify a file if Dota is running, reads the existing config, appends the new grid, writes a timestamped backup in `cfg/DotaHeroGridStudio_backups`, and replaces the file. Only existing standard Steam installs under common folders are discovered in this version. Close Dota before installation and retain your own copy of the config.
+1. Нажмите **Generate Dota Test Grid**. Это отдельный проект; предыдущий можно вернуть Undo.
+2. **Export JSON** создаёт файл тестовой сетки. В Windows-сборке можно выбрать Steam-аккаунт и нажать **Установить в Dota** после закрытия игры. Эта операция добавляет сетку к имеющимся, автоматически переименовывая совпадающие названия.
+3. В игре выберите `Dota Glyph Calibration v0.2`. Проверьте латиницу, цифры, блоки, линии и строки RUN/GLYPHS. Сделайте скриншот; запишите отсутствующие символы и нужное смещение.
+4. Вернитесь к рисунку, загрузите свой `radiance_regular.ttf`/OTF, настройте X/Y/baseline и интервалы в **Dota Text Calibration**. Шрифт не поставляется с приложением.
+5. Сначала экспортируйте небольшой рисунок в **Per glyph**. Затем сравните **Text runs**. Если строки расходятся, используйте Per glyph до калибровки.
 
-## Format and limits
+Готовые файлы: `fixtures/dota_glyph_calibration.json` (полная таблица), `fixtures/text_category_probe.json` (короткий тест). При ручной установке не заменяйте существующий файл без копии: сначала откройте его в редакторе, чтобы экспорт сохранил имеющиеся сетки. Для добавления отдельного тестового файла к имеющимся удобнее desktop-установка.
 
-`fixtures/sample_hero_grid_config.json` uses the public version 3 structure. The format adapter accepts unknown extra fields and retains existing configs. `.dotagrid` is a separate versioned project format. The artboard dimensions are approximate; user game testing with a current grid is still required. The Windows installer path and Tauri compilation are unverified on a Windows machine. This release does not include Canny, custom glyph rendering in Dota, batch processing, groups, shapes, Radiance metrics, localization, or a Windows executable.
+## Экспорт и оптимизация
 
-Source examples for the grid structure: [Cyborgmatt's config](https://gist.github.com/Cyborgmatt/3b403178ee0b88bed2be9c523fbcb2b7) and [angrybacon's config](https://gist.github.com/angrybacon/6f36771519ddb0e7bbc045ece27d9898).
+- **Auto** и **Text runs** соединяют только непрерывные участки одной строки с одинаковым размером editor glyph и совместимым шагом. Пробелы и разрывы не склеиваются; несовместимые элементы остаются отдельными категориями. Длина run ограничена 64 символами.
+- **Per glyph** создаёт одну категорию на элемент.
+- Кнопка подгонки интервалов использует размер ячейки конвертера и glyph advance. С Radiance учитывается относительная измеренная ширина каждого символа. Это приблизительные метрики, пока не проверены в игре.
+- Бюджеты 400/1200/3000 — ориентиры приложения, **не подтверждённые безопасные лимиты Dota**. Превышение останавливает экспорт/установку, сохраняя весь рисунок. Custom допускает до 10000 категорий.
+- Без Radiance включён ASCII fallback (`╱ → /`, `█ → #` и т. п.). С загруженным шрифтом доступность проверяется по Unicode cmap 4/12, а ширина через Canvas. Проверка относится к загруженному файлу шрифта, не к клиенту Dota.
+- **Dota Export Preview** рисует именно строки и координаты экспорта, без подложки и сетки. Шрифт/отступы остаются приближением. **Editor Preview** показывает отдельные glyph исходной композиции.
+- `.dotagrid` отдельно хранит `art`, категории, картинку, параметры и загруженный шрифт. v0.1 автоматически мигрирует в v2 проекта. Неизвестные поля импортированных категорий/сеток/корня сохраняются при JSON round-trip.
+
+## Установка и восстановление
+
+Steam обнаруживается через Windows Registry (`SteamPath`, `InstallPath`) и обычные каталоги. В списке показываются аккаунты с существующей папкой `userdata/<account>/570/remote/cfg`, даже если JSON ещё нет. Создание всей папки Dota автоматически не выполняется: сначала запустите игру для аккаунта.
+
+Установщик проверяет процесс Dota, путь и существующий JSON, сохраняет backup, записывает временный файл в том же каталоге и заменяет целевой файл через Windows rename. Перед заменой проверяется, что исходный файл не изменился. Блокировка предотвращает конкурирующие операции приложения. Ошибка резервного копирования отменяет запись. Для нового файла backup содержит пустую сетку version 3.
+
+**Backup History → Восстановить** возвращает весь файл из выбранной копии, предварительно сохраняя текущее состояние. По умолчанию хранятся последние 20 копий, настройка 1–200. Они находятся в `cfg/DotaHeroGridStudio_backups`. Если приложение аварийно завершилось, оставшийся `.studio-lock` нужно удалить вручную только после закрытия приложения.
+
+## Проверки
+
+```sh
+npm test
+npm run typecheck
+npm run build
+npx playwright install chromium
+npm run test:e2e
+cargo test --manifest-path src-tauri/Cargo.toml --lib
+```
+
+`typecheck` — историческое имя команды **проверки синтаксиса JS**, не проверка TypeScript-типов. Проект продолжает v0.1 на JavaScript. Browser E2E проверяет PNG→ASCII/Line Art→JSON, импорт, Save/Open, бюджет, калибровку и desktop-вызов с mock bridge. Реальные запись/backup/restore проверяются Rust-тестами на временных файлах. Они не подменяют тест в Dota.
+
+## Структура
+
+`src/art-export.mjs` — преобразование и бюджет; `core.mjs` — форматы; `converter.mjs` + worker — Sobel, thinning, noise components, direction-aware/adaptive sampling, ASCII и dither; `font.mjs` — Unicode cmap; `app.mjs` — UI; `src-tauri/src/storage.rs` — файловые операции и тесты; `main.rs` — Steam и Tauri bridge.
+
+Нет телеметрии, аккаунтов или отправки изображений. Полное ТЗ v1 (группы, сложное рисование, продвинутый Canny и т. д.) остаётся следующим этапом; эта версия закрывает путь image→Dota JSON и инструменты его проверки.

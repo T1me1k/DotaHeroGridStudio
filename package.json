@@ -1,16 +1,18 @@
 {
   "name": "dota-hero-grid-studio",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "node dev-server.mjs",
     "test": "node --test tests/*.test.mjs",
     "build": "node build.mjs",
-    "typecheck": "node --check src/core.mjs && node --check src/converter.mjs && node --check src/app.mjs",
-    "tauri": "tauri"
+    "typecheck": "node scripts/check.mjs",
+    "tauri": "tauri",
+    "test:e2e": "playwright test"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.0.0"
+    "@tauri-apps/cli": "2.11.5",
+    "@playwright/test": "1.56.1"
   }
 }
